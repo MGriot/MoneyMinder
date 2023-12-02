@@ -1,0 +1,260 @@
+from dash import Dash, html, dcc, dash_table, State
+from dash.dependencies import Output, Input, ALL
+from dash.exceptions import PreventUpdate
+import dash_bootstrap_components as dbc
+import plotly.express as px
+import plotly.graph_objs as go
+import pandas as pd
+import numpy as np
+import os
+from datetime import date, timedelta
+
+from moduls.graph import plot_barchart, in_out, plot_linechart, plot_categories
+from moduls.function import categorize_transactions
+from moduls.colors import colors_in_out, colors_categories
+
+app = Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+)
+file = "C:/Users/Admin/Documents/GitHub/Banca/data/dataframe20231125.csv"
+
+df = pd.read_csv(file)
+# Converti la colonna 'Data' in formato datetime
+df["Data"] = pd.to_datetime(df["Data"])
+df["Data"].fillna(pd.NaT, inplace=True)
+
+# Converti la colonna 'Importo' in numeri
+df["Importo"] = pd.to_numeric(df["Importo"], errors="coerce")
+# Calcola i totali
+total = df["Importo"].sum()
+total_positive = df[df["Importo"] > 0]["Importo"].sum()
+total_negative = df[df["Importo"] < 0]["Importo"].sum()
+
+
+# Define the main content
+content = html.Div(
+    id="page-content", style={"width": "100%", "display": "inline-block"}
+)
+
+
+app.layout = html.Div([dcc.Location(id="url", refresh=False), content])
+
+index_page = html.Div(
+    [
+        html.Div(
+            [
+                html.H1(
+                    "DashBoard - Personal Financial", style={"textAlign": "center"}
+                ),
+                html.Div(
+                    [
+                        dcc.Link("Dashboard", href="/"),
+                        html.Span(" | "),
+                        dcc.Link("Dati", href="/page-1"),
+                    ],
+                    style={"textAlign": "center"},
+                ),
+            ]
+        ),
+        html.Div(
+            children=[
+                dbc.Button(
+                    f"Patrimonio: {round(total,2)}",
+                    color="primary",
+                    style={
+                        "fontSize": 20,
+                        "textAlign": "center",
+                        "marginRight": "10px",
+                    },
+                ),
+                dbc.Button(
+                    f"Parziale positivo: {round(total_positive,2)}",
+                    color="primary",
+                    style={
+                        "fontSize": 20,
+                        "textAlign": "center",
+                        "marginRight": "10px",
+                    },
+                ),
+                dbc.Button(
+                    f"Parziale negativo: {round(total_negative,2)}",
+                    color="primary",
+                    style={
+                        "fontSize": 20,
+                        "textAlign": "center",
+                        "marginRight": "10px",
+                    },
+                ),
+            ]
+        ),
+        html.Div(
+            [
+                dcc.DatePickerRange(
+                    id="my-date-picker-range",
+                    min_date_allowed=df[
+                        "Data"
+                    ].min()  # Calcola la data un mese prima della data massima
+                    - timedelta(days=30),
+                    max_date_allowed=df["Data"].max(),
+                    initial_visible_month=date.today(),
+                    start_date=df["Data"].max() - timedelta(days=30),
+                    end_date=date.today(),
+                    display_format="DD/MM/YY",  # Set the date format to day-month-year
+                ),
+                ### GRAFICI
+                html.Div(
+                    [
+                        html.Div(  # prima riga
+                            [
+                                dcc.Graph(id="barchart"),
+                            ],
+                            style={"width": "70%", "display": "inline-block"},
+                        ),
+                        html.Div(
+                            [
+                                dcc.Graph(id="barchart_in_out"),
+                            ],
+                            style={
+                                "width": "30%",
+                                "float": "right",
+                                "display": "inline-block",
+                            },
+                        ),
+                    ],
+                ),
+                html.Div(
+                    [
+                        html.Div(  # prima riga
+                            [
+                                dcc.Graph(id="plot_linechart"),
+                            ],
+                            style={"width": "70%", "display": "inline-block"},
+                        ),
+                    ],
+                ),
+                html.Div(
+                    [
+                        html.Div(  # prima riga
+                            [
+                                dcc.Graph(id="plot_categories"),
+                            ],
+                            style={"width": "30%", "display": "inline-block"},
+                        ),
+                    ],
+                ),
+            ]
+        ),
+    ]
+)
+
+
+table_page = html.Div(
+    [
+        html.H1("Tabella dei Dati", style={"textAlign": "center"}),
+        html.Div(
+            [
+                dcc.Link("Dashboard", href="/"),
+                html.Span(" | "),
+                dcc.Link("Dati", href="/page-1"),
+            ],
+            style={"textAlign": "center"},
+        ),
+        html.Div(
+            children=[
+                html.Button("Save", id="save-button"),
+                html.Button("Reload", id="reload-button"),
+                dcc.Upload(
+                    id="upload-button", children=html.Button("Load"), multiple=False
+                ),
+                html.Button("Categorize", id="categorize-button"),
+            ]
+        ),
+        html.Div(
+            dash_table.DataTable(
+                id="table",
+                columns=[
+                    {"name": i, "id": i, "presentation": "dropdown"} for i in df.columns
+                ],
+                data=df.to_dict("records"),
+                editable=False,
+            ),
+        ),
+    ]
+)
+
+
+@app.callback(Output("page-content", "children"), [Input("url", "pathname")])
+def display_page(pathname):
+    if pathname == "/page-1":
+        return table_page
+    else:
+        return index_page
+
+
+# Aggiungi una callback per aggiornare il grafico quando un pulsante del mese o il selettore dell'anno viene cliccato
+@app.callback(
+    [
+        Output("barchart", "figure"),
+        Output("barchart_in_out", "figure"),
+        Output("plot_linechart", "figure"),
+        Output("plot_categories", "figure"),
+    ],
+    [
+        Input("my-date-picker-range", "start_date"),
+        Input("my-date-picker-range", "end_date"),
+    ],
+)
+def update_graph(
+    start_date,
+    end_date,
+    colors=colors_in_out,
+    colors_categories=colors_categories,
+):
+    filtered_df = df[(df["Data"] >= start_date) & (df["Data"] <= end_date)]
+    return [
+        plot_barchart(filtered_df, colors=colors),
+        in_out(filtered_df),
+        plot_linechart(df, start_date, end_date),
+        plot_categories(df, start_date, end_date, colors=colors_categories),
+    ]
+
+
+# CallBack per i pulsanti della pagina con la tabella
+# Modifica la tua callback per impostare 'confirm' su 'displayed' quando il pulsante viene premuto
+@app.callback(
+    Output("confirm", "displayed"),
+    Input("categorize-button", "n_clicks"),
+    State("table", "data"),
+)
+def update_output(n_clicks, rows):
+    if n_clicks is not None:
+        # Aggiorna il percorso del file CSV e le altre variabili secondo le tue esigenze
+        dataframe_path = "C:/Users/Admin/Documents/GitHub/Banca/data/dataframe.csv"
+        description_columns = ["Operazione", "Dettagli", "Categoria banca"]
+        training_columns = ["Categoria", "Subcategoria"]
+        label_columns = ["Categoria", "Subcategoria"]
+        transaction_column = "Dettagli"
+        confidence_threshold = 0.7
+
+        categorize_transactions(
+            dataframe_path,
+            description_columns,
+            training_columns,
+            label_columns,
+            transaction_column,
+            confidence_threshold,
+        )
+    # Mostra il pop-up
+    return True
+
+
+# Aggiungi questo componente alla tua app
+confirm = dcc.ConfirmDialog(
+    id="confirm",
+    message="Il processo di categorizzazione è in atto.",
+)
+
+if __name__ == "__main__":
+    app.run_server(debug=True)
