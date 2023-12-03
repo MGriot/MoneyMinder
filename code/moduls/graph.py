@@ -5,17 +5,43 @@ import plotly.graph_objs as go
 
 
 # barchart tempo vs money
-def plot_barchart(df, colors):
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=df["Data"],
-            y=df["Importo"],
-            marker_color=df["Importo"].apply(
-                lambda x: colors["positive"] if x >= 0 else colors["negative"]
+def plot_barchart(filtered_df, colors, saldo=True):
+    # Dividi il dataframe in transazioni positive e negative
+    positive_df = filtered_df[filtered_df["Importo"] >= 0]
+    negative_df = filtered_df[filtered_df["Importo"] < 0]
+
+    # Crea il grafico a barre
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=positive_df["Data"],
+                y=positive_df["Importo"],
+                marker_color=colors["positive"],
+                name="Input",
             ),
-        )
+            go.Bar(
+                x=negative_df["Data"],
+                y=negative_df["Importo"],
+                marker_color=colors["negative"],
+                name="Output",
+            ),
+        ]
     )
+
+    # Aggiungi lo stato del saldo del conto
+    if saldo == True:
+        fig.add_trace(
+            go.Scatter(
+                x=filtered_df["Data"],
+                y=filtered_df["Balance"],
+                mode="lines",
+                marker_color="black",
+                name="Balance",
+            )
+        )
+    # Imposta il modo di visualizzazione delle barre
+    fig.update_layout(barmode="relative")
+
     fig.update_yaxes(title_text="Importo (€)")
     fig.update_xaxes(
         tickformat="%d-%m-%Y",  # Set tick format to day-month-year
@@ -47,15 +73,17 @@ def in_out(df):
 
 
 def plot_linechart(df, start_date, end_date):
-    # Filtra il dataframe per la finestra temporale specificata
-    df = df[(df["Data"] >= start_date) & (df["Data"] <= end_date)]
-
     # Calcola il saldo del conto dopo ogni transazione
     df["Saldo"] = df["Importo"].cumsum()
 
+    # Filtra il dataframe per la finestra temporale specificata
+    filtered_df = df[(df["Data"] >= start_date) & (df["Data"] <= end_date)]
+
     # Crea il grafico a linee
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["Data"], y=df["Saldo"], mode="lines"))
+    fig.add_trace(
+        go.Scatter(x=filtered_df["Data"], y=filtered_df["Saldo"], mode="lines")
+    )
     fig.update_yaxes(title_text="Saldo (€)")
     return fig
 

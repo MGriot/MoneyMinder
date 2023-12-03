@@ -29,6 +29,9 @@ total = df["Importo"].sum()
 total_positive = df[df["Importo"] > 0]["Importo"].sum()
 total_negative = df[df["Importo"] < 0]["Importo"].sum()
 
+# Calcola il saldo del conto dopo ogni transazione
+df["Balance"] = df["Importo"].cumsum()
+
 dash.register_page(__name__)
 
 layout = html.Div(
