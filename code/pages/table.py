@@ -9,8 +9,9 @@ import plotly.express as px
 import plotly.graph_objs as go
 import pandas as pd
 import numpy as np
+import io
 
-from moduls.function import categorize_transactions
+from moduls.function import categorize_transactions, load_data
 import moduls.globals as globals
 
 # Definisci i tuoi array
@@ -18,6 +19,11 @@ categorie = ["casa", "stipendio"]
 subcategorie = ["corrente", "stipendio"]
 
 df = globals.df
+
+# Aggiorna i tipi di dati delle colonne
+df["Category"] = df["Category"].astype("category")
+df["Subcategory"] = df["Subcategory"].astype("category")
+
 
 app = Dash(
     __name__,
@@ -34,52 +40,46 @@ layout = html.Div(
                 html.Button("Save", id="save-button"),
                 html.Button("Reload", id="reload-button"),
                 dcc.Upload(
-                    id="upload-button", children=html.Button("Load"), multiple=False
+                    id="upload-button",
+                    children=html.Button("Load"),
+                    multiple=False,
                 ),
                 html.Button("Categorize", id="categorize-button"),
             ]
         ),
         dash_table.DataTable(
             id="table",
-            columns=[
-                {"id": "Data", "name": "Data", "type": "datetime"},
-                {"id": "Operazione", "name": "Operazione"},
-                {"id": "Dettagli", "name": "Dettagli"},
-                {"id": "Conto o carta", "name": "Conto o carta"},
-                {"id": "Contabilizzazione", "name": "Contabilizzazione"},
-                {"id": "Categoria banca", "name": "Categoria banca"},
-                {"id": "Valuta", "name": "Valuta"},
-                {"id": "Importo", "name": "Importo", "type": "text"},
-                {
-                    "id": "Categoria",
-                    "name": "Categoria",
-                    "presentation": "dropdown",
-                    "type": "text",
-                },
-                {
-                    "id": "Subcategoria",
-                    "name": "Subcategoria",
-                    "presentation": "dropdown",
-                    "type": "text",
-                },
-                {"id": "Commento", "name": "Commento"},
-            ],
             data=df.to_dict("records"),
             editable=True,
             dropdown={
-                "Categoria": {
-                    "options": [{"label": str(i), "value": str(i)} for i in categorie],
+                "Category": {
+                    "options": [{"label": i, "value": i} for i in categorie],
                 },
-                "Subcategoria": {
-                    "options": [
-                        {"label": str(i), "value": str(i)} for i in subcategorie
-                    ],
+                "Subcategory": {
+                    "options": [{"label": i, "value": i} for i in subcategorie],
                 },
             },
         ),
         html.Div(id="table-dropdown-container"),
     ]
 )
+
+
+@callback(
+    Output("table", "data"),
+    Input("upload-button", "contents"),
+)
+def update_table(contents):
+    if contents is not None:
+        # Recupera i contenuti del file caricato
+        print(io.StringIO(contents))
+        data = load_data(io.StringIO(contents))
+
+        # Aggiorna il dataframe globale
+        globals.df = data
+
+        # Riempie la tabella con i nuovi dati
+        return globals.df.to_dict("records")
 
 
 # CallBack per i pulsanti della pagina con la tabella

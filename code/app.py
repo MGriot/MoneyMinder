@@ -15,7 +15,7 @@ from moduls.function import create_settings_file, load_data
 import moduls.globals as globals
 
 settings_file_path = "C:/Users/Admin/Documents/GitHub/MoneyMinder/data/settings.json"
-file = "C:/Users/Admin/Documents/GitHub/MoneyMinder/data/dataframe_20231202_194450.csv"
+file = "C:/Users/Admin/Documents/GitHub/MoneyMinder/data/dataframe_20231226_111609.csv"
 
 create_settings_file(settings_file_path, file)
 globals.df = load_data(file)

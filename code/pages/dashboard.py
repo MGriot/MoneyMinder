@@ -8,29 +8,26 @@ import plotly.graph_objs as go
 import pandas as pd
 import numpy as np
 import os
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn import metrics
 
+from moduls.function import date_for_forecast
 from moduls.graph import plot_barchart, in_out, plot_linechart, plot_categories
 from moduls.colors import colors_in_out, colors_categories
 import moduls.globals as globals
 
 df = globals.df
 
+# days = globals.dates = df["Date"]
 
-# Converti la colonna 'Data' in formato datetime
-df["Data"] = pd.to_datetime(df["Data"])
-df["Data"].fillna(pd.NaT, inplace=True)
-
-# Converti la colonna 'Importo' in numeri
-df["Importo"] = pd.to_numeric(df["Importo"], errors="coerce")
 # Calcola i totali
-total = df["Importo"].sum()
-total_positive = df[df["Importo"] > 0]["Importo"].sum()
-total_negative = df[df["Importo"] < 0]["Importo"].sum()
+total = globals.total = df["Import"].sum()
+total_positive = globals.total_positive = df[df["Import"] > 0]["Import"].sum()
+total_negative = globals.total_negative = df[df["Import"] < 0]["Import"].sum()
 
-# Calcola il saldo del conto dopo ogni transazione
-df["Balance"] = df["Importo"].cumsum()
 
 dash.register_page(__name__)
 
@@ -72,12 +69,12 @@ layout = html.Div(
                 dcc.DatePickerRange(
                     id="my-date-picker-range",
                     min_date_allowed=df[
-                        "Data"
+                        "Date"
                     ].min()  # Calcola la data un mese prima della data massima
                     - timedelta(days=30),
-                    max_date_allowed=df["Data"].max(),
+                    max_date_allowed=df["Date"].max(),
                     initial_visible_month=date.today(),
-                    start_date=df["Data"].max() - timedelta(days=30),
+                    start_date=df["Date"].max() - timedelta(days=30),
                     end_date=date.today(),
                     display_format="DD/MM/YY",  # Set the date format to day-month-year
                 ),
@@ -147,7 +144,8 @@ def update_graph(
     colors=colors_in_out,
     colors_categories=colors_categories,
 ):
-    filtered_df = df[(df["Data"] >= start_date) & (df["Data"] <= end_date)]
+    df["Balance"] = df["Import"].cumsum()
+    filtered_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
     return [
         plot_barchart(filtered_df, colors=colors),
         in_out(filtered_df),

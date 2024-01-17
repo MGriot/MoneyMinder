@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas.tseries.offsets import DateOffset
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
@@ -18,21 +19,21 @@ def create_settings_file(file_path, data_file_path):
 
 def load_data(file_path):
     df = pd.read_csv(file_path)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date")
+    df["Import"] = df["Import"].astype("float")
     return df
 
 
-def process_data(file_path, source, name):
+def process_data(file_path, source, name, save):
     """
     Questa funzione processa un file di dati Excel e restituisce un DataFrame pandas.
-
     Parametri:
     - file_path (str): Il percorso del file Excel da processare.
     - source (str): La fonte dei dati.
     - name (str): Il nome della banca.
-
     Ritorna:
     - df (DataFrame): Il DataFrame processato.
-
     La funzione esegue le seguenti operazioni solo se source è "bank" e name è "san_paolo":
     1. Carica il file Excel in un DataFrame pandas.
     2. Rimuove le prime righe fino alla prima cella non vuota nella prima colonna.
@@ -45,7 +46,6 @@ def process_data(file_path, source, name):
     9. Aggiunge le nuove colonne 'Categoria', 'Subcategoria' e 'Commento', inizialmente impostate su None.
     """
     if source == "bank" and name == "san_paolo":
-        # Carica il file xlsx in un DataFrame
         df = pd.read_excel(file_path)
         # Rimuovi le prime righe fino alla prima cella vuota nella prima colonna
         df = df[df.iloc[:, 0].notna()]
@@ -57,20 +57,38 @@ def process_data(file_path, source, name):
         df = df.rename(columns=new_header)
         # Resetta gli indici del DataFrame
         df = df.reset_index(drop=True)
+        # Rinomina le colonne
+        df = df.rename(
+            columns={
+                "Data": "Date",
+                "Categoria ": "Bank Category",
+                "Operazione": "Operation",
+                "Dettagli": "Details",
+                "Conto o carta": "Account or Card",
+                "Contabilizzazione": "Accounting",
+                "Valuta": "Valute",
+                "Importo": "Import",
+            }
+        )
         # Converte la colonna "Data" in formato datetime
-        df["Data"] = pd.to_datetime(df["Data"])
-        # Rinomina la colonna 'Categoria' in 'Categoria banca'
-        df = df.rename(columns={"Categoria ": "Categoria banca"})
-        # Aggiungi le nuove colonne 'Categoria' e 'Subcategoria'
-        df["Categoria"] = None
-        df["Subcategoria"] = None
-        df["Commento"] = None
-        return df
-    else:
-        return None
+        df["Date"] = pd.to_datetime(df["Date"])
+        # Aggiungi le nuove colonne 'Categoria', 'Subcategoria' e 'Commento'
+        df[["Category", "Subcategory", "Comment"]] = None, None, None
+        # Converti le colonne 'Categoria', 'Subcategoria' e 'Commento' in formato stringa
+        df[["Category", "Subcategory", "Comment"]] = df[
+            ["Category", "Subcategory", "Comment"]
+        ].astype("str")
+        if save == True:
+            today = datetime.datetime.now()
+            df.to_csv(
+                f'C:/Users/Admin/Documents/GitHub/MoneyMinder/data/dataframe_{today.strftime("%Y%m%d_%H%M%S")}.csv',
+                index=False,
+            )
+        else:
+            return df
 
 
-def merge_and_sort(df1, df2, columns):
+def merge_and_sort(df1, df2, columns, save):
     """
     Unisce due DataFrame, rimuove i duplicati basandosi su specifiche colonne, converte la colonna "Data" in formato datetime, rimuove le righe con valori mancanti o non validi nella colonna "Data" e ordina il DataFrame in base alla colonna "Data".
 
@@ -83,10 +101,11 @@ def merge_and_sort(df1, df2, columns):
     df (pandas.DataFrame): DataFrame risultante dopo l'unione, la rimozione dei duplicati, la conversione della colonna "Data" in datetime, la rimozione delle righe con valori mancanti o non validi nella colonna "Data" e l'ordinamento in base alla colonna "Data".
     """
     # Unisci i due DataFrame
+    df2 = process_data(df2, "bank", "san_paolo", save=False)
     df = pd.concat([df1, df2], keys=["df1", "df2"])
 
     # Converte la colonna "Data" in formato datetime
-    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+    df["Data"] = pd.to_datetime(df["Date"], errors="coerce")
 
     # Rimuovi i duplicati basandoti su specifiche colonne, mantenendo la prima occorrenza (quella da df1)
     df = df.loc[~df.duplicated(subset=columns, keep="first")]
@@ -96,13 +115,15 @@ def merge_and_sort(df1, df2, columns):
 
     # Resetta l'indice
     df = df.reset_index(drop=True)
-    today = datetime.datetime.now()
-    df.to_csv(
-        f'C:/Users/Admin/Documents/GitHub/Banca/data/dataframe_{today.strftime("%Y%m%d_%H%M%S")}.csv',
-        index=False,
-    )
 
-    return df
+    if save == True:
+        today = datetime.datetime.now()
+        df.to_csv(
+            f'C:/Users/Admin/Documents/GitHub/Banca/data/dataframe_{today.strftime("%Y%m%d_%H%M%S")}.csv',
+            index=False,
+        )
+    else:
+        return df
 
 
 def categorize_transactions(
@@ -193,3 +214,18 @@ def categorize_transactions(
     )
 
     # return df_completo
+
+
+def date_for_forecast(date, forecast_day=30):
+    # Trova la data più grande
+    data_max = date.max()
+
+    # Crea un array con le 30 date successive
+    date_range = pd.date_range(
+        start=data_max, periods=forecast_day + 1, freq=DateOffset(days=1)
+    )
+
+    # Converti l'array in UTC
+    date_range = date_range.tz_localize("UTC")
+
+    return date_range
